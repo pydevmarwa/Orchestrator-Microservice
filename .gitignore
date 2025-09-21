@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+*.egg-info/
+*.egg
+
+# Logs
+logs/
+*.log
+
+# Docker
+*.env
+*.db
+
+# VSCode / PyCharm
+.vscode/
+.idea/
+
+# pytest cache & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# System
+.DS_Store
+Thumbs.db

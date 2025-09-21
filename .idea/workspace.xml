@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="28f8ddaf-b26a-48e9-982c-f364d78bd6bc" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.env" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.env.example" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/test_dats.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dockerfile.orchestrator" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dockerfile.worker" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/orchestrator/config.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/orchestrator/graph_utils.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/orchestrator/kafka_client.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/orchestrator/logger.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/orchestrator/main.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/orchestrator/metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/orchestrator/scheduler.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_graph_utils.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_integration_worker.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_kafka_client.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_scheduler.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tests/test_worker_base.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tools/objects.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/tools/objects_complete.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/workers/application/worker.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/workers/ingestion/worker.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/workers/standardization/worker.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/workers/worker_base.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 4
+}]]></component>
+  <component name="ProjectId" id="3318O4iR2vZRbh0tb3ip61r2Ixw" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "master"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-495700d161d3-aa17d162503b-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-243.22562.220" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="28f8ddaf-b26a-48e9-982c-f364d78bd6bc" name="Changes" comment="" />
+      <created>1758473182777</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1758473182777</updated>
+    </task>
+    <servers />
+  </component>
+</project>
