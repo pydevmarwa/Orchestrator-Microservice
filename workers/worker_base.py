@@ -25,6 +25,7 @@ from orchestrator.logger import get_logger
 
 log = get_logger("worker_base")
 
+# Redis client
 try:
     rclient = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
     rclient.ping()
@@ -35,6 +36,7 @@ except Exception as e:
 client = get_kafka_client()
 shutdown_event = threading.Event()
 
+# Signal handling
 def _on_signal(signum, frame):
     log.info("Signal %s received, setting shutdown flag", signum)
     shutdown_event.set()
@@ -45,8 +47,8 @@ try:
 except Exception:
     pass
 
+# Retry helper
 RETRY_PREFIX = "retry"
-
 def retry_key(obj_id: str) -> str:
     """Return the Redis key used to store retry count for an object."""
     return f"{RETRY_PREFIX}:{obj_id}"
@@ -76,6 +78,7 @@ def safe_del(key: str) -> None:
     except Exception:
         pass
 
+# Publish results after worker processing
 def publish_result(obj_id: str, zone: str, ok: bool, info: str, run_id: str = None) -> None:
     """
     Publish the processing result for an object.
@@ -107,6 +110,7 @@ def publish_result(obj_id: str, zone: str, ok: bool, info: str, run_id: str = No
             log.exception("Failed to publish to %s: %s", TOPIC_LOADED, e)
         return
 
+    # failed path (idempotent)
     failed_set_key = f"{REDIS_PREFIX}:failed"
     should_publish = True
     try:
@@ -125,7 +129,7 @@ def publish_result(obj_id: str, zone: str, ok: bool, info: str, run_id: str = No
         should_publish = True
 
     if not should_publish:
-        log.info("Failure for %s already published previously — skipping duplicate failed/dlq", obj_id)
+        log.info("Failure for %s already published — skipping duplicate", obj_id)
         return
 
     try:
@@ -133,42 +137,29 @@ def publish_result(obj_id: str, zone: str, ok: bool, info: str, run_id: str = No
         client.send(TOPIC_DLQ, payload, key=obj_id, sync=False)
         log.info("Published FAILED and DLQ for %s zone=%s", obj_id, zone)
     except Exception as e:
-        log.exception("Failed to publish failure/DLQ for %s: %s", obj_id, e)
+        log.exception("Failed to publish FAILED/DLQ for %s: %s", obj_id, e)
 
-def _republish_ready_nonblocking(obj_id: str, zone: str, run_id: str = None, attempt: int = 1) -> None:
-    """
-    Re-publish a READY message in background after a backoff.
-
-    This helper is used to retry READY publishes without blocking worker threads.
-    """
-    def _job():
-        delay = min(30, (2 ** attempt) + random.random())
-        log.info("Retrying %s after %.1fs (attempt=%d)", obj_id, delay, attempt)
-        time.sleep(delay)
-        msg = {
-            "event": "ObjectReady",
-            "id": obj_id,
-            "zone": zone,
-            "info": f"retry {attempt}",
-            "run_id": run_id,
-        }
-        try:
-            client.send(TOPIC_READY, msg, key=obj_id, sync=False)
-        except Exception as e:
-            log.exception("Failed to re-publish READY for %s: %s", obj_id, e)
-
-    t = threading.Thread(target=_job, daemon=True)
-    t.start()
-
+# Worker handler
 def handle_message(payload: Dict[str, Any], zone: str, process_fn: Callable[[str], tuple]) -> None:
     """
-    Handle a single READY message: call the provided process_fn(obj_id) and publish results.
+    Handle a single READY message: call process_fn(obj_id) and publish results.
 
-    The provided process_fn must return a tuple (ok: bool, info: str).
-    Exceptions inside process_fn are caught and treated as failures.
+    Logic:
+      - If preflight_fail=True, skip process_fn and mark FAILED
+      - Otherwise, call process_fn
+      - Publish LOADED or FAILED
     """
     obj_id = str(payload.get("id"))
     run_id = payload.get("run_id")
+    preflight_fail = payload.get("preflight_fail", False)
+
+    if preflight_fail:
+        info = "Preflight check failed, skipping processing"
+        log.warning("Preflight failure for %s: %s", obj_id, info)
+        safe_del(retry_key(obj_id))
+        publish_result(obj_id, zone, ok=False, info=info, run_id=run_id)
+        return
+
     try:
         ok, info = process_fn(obj_id)
     except Exception as e:
@@ -181,15 +172,18 @@ def handle_message(payload: Dict[str, Any], zone: str, process_fn: Callable[[str
             safe_del(retry_key(obj_id))
         except Exception:
             pass
-        publish_result(obj_id, zone, False, info, run_id=run_id)
+        publish_result(obj_id, zone, ok=False, info=info, run_id=run_id)
         return
 
+    # success
     try:
         safe_del(retry_key(obj_id))
     except Exception:
         pass
-    publish_result(obj_id, zone, True, info, run_id=run_id)
+    publish_result(obj_id, zone, ok=True, info=info, run_id=run_id)
 
+
+# Worker loop
 def start_worker_loop(zone: str, process_fn: Callable[[str], tuple]) -> None:
     """
     Start the worker loop for a specific zone.
@@ -232,8 +226,6 @@ def start_worker_loop(zone: str, process_fn: Callable[[str], tuple]) -> None:
                         if payload.get("zone") != zone:
                             continue
                         executor.submit(handle_message, payload, zone, process_fn)
-        except Exception as e:
-            log.exception("Worker loop unexpected error: %s", e)
         finally:
             log.info("Shutting down worker loop (zone=%s)", zone)
             try:
