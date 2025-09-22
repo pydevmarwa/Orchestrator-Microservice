@@ -231,13 +231,14 @@ class Orchestrator:
 
     def publish_ready(self, node: str):
         """
-        Publish a READY event for the given node if appropriate.
+        Publish a READY event for the given node.
 
-        Checks:
-          - skip if already loaded or inflight (dedupe via Redis)
-          - run preflight checks (may publish a FAILED instead)
-          - performs frequency-based skip optimizations (best-effort)
-          - publishes READY synchronously and marks node as inflight in Redis
+        Logic:
+          - Skip if already loaded or inflight (dedupe via Redis)
+          - Perform preflight checks
+              - Include a preflight flag in the payload so worker knows it will fail
+          - Mark node as inflight in Redis
+          - Metrics and logging
         """
         node = str(node)
         # dedupe checks
@@ -246,7 +247,6 @@ class Orchestrator:
                 log.debug("Skip publish_ready %s loaded/inflight", node)
                 return
         except Exception:
-            # Redis transient failure -> continue but avoid crashing
             pass
 
         meta = self.meta.get(node, {})
@@ -256,29 +256,26 @@ class Orchestrator:
             return
 
         # preflight
-        if self._preflight_check(node, zone):
-            reason = f"preflight rejection by orchestrator (zone={zone})"
-            self._publish_failed_by_orch(node, reason)
-            return
-
-        # optional optimization
-        skip_parent_flag = False
-        for p in self.parents_of(node):
-            if self._should_skip_by_frequency(p):
-                skip_parent_flag = True
-                log.info("Optimization: parent %s considered fresh for node %s", p, node)
-
-        msg = {"event": "ObjectReady", "id": node, "zone": zone, "name": meta.get("NomObjet"), "run_id": self.run_id, "ts": int(time.time())}
+        preflight_fail = self._preflight_check(node, zone)
+        payload = {
+            "event": "ObjectReady",
+            "id": node,
+            "zone": zone,
+            "name": meta.get("NomObjet"),
+            "run_id": self.run_id,
+            "ts": int(time.time()),
+            "preflight_fail": preflight_fail,  # flag pour le worker
+        }
 
         try:
             # synchronous send to get immediate backpressure if needed
-            self.client.send(TOPIC_READY, msg, key=node, sync=True, timeout=5)
+            self.client.send(TOPIC_READY, payload, key=node, sync=True, timeout=5)
             try:
                 self.redis.sadd(self.key_inflight, node)
             except Exception as e:
                 log.warning("Failed to mark inflight %s: %s", node, e)
             metrics.READY_COUNTER.inc()
-            log.info("Published READY %s zone=%s skip_parent=%s", node, zone, skip_parent_flag)
+            log.info("Published READY %s zone=%s preflight_fail=%s", node, zone, preflight_fail)
         except Exception as e:
             log.exception("Failed to publish READY for %s: %s", node, e)
 
@@ -291,13 +288,7 @@ class Orchestrator:
     # --- Main loop ---
 
     def run(self) -> None:
-        """
-        Main run loop:
-          - publish initial roots
-          - create consumer for TOPIC_LOADED and listen for worker results
-          - handle LOADED -> mark Redis & publish children when all parents satisfied
-          - handle FAILED -> forward to FAILED/DLQ and update metric
-        """
+        # Publish initial roots
         self.initial_publish()
         log.info("Listening for loaded events on %s", TOPIC_LOADED)
 
@@ -306,11 +297,10 @@ class Orchestrator:
             try:
                 consumer = self.client.consumer(TOPIC_LOADED, group_id=f"orch-{self.run_id}")
             except Exception as e:
-                log.warning("Kafka consumer not ready yet: %s — will retry in 3s", e)
+                log.warning("Kafka consumer not ready yet: %s — retry in 3s", e)
                 time.sleep(3)
 
         if self._stop.is_set():
-            log.info("Stop requested before consumer creation")
             return
 
         try:
@@ -325,56 +315,35 @@ class Orchestrator:
 
                     nid = str(ev.id)
                     status = ev.status
-                    log.info("Loaded event %s -> %s", nid, status)
 
                     if status == "loaded":
                         metrics.LOADED_COUNTER.inc()
-                        try:
-                            self.redis.sadd(self.key_loaded, nid)
-                            self.redis.srem(self.key_inflight, nid)
-                        except Exception as e:
-                            log.warning("Redis write fail %s: %s", nid, e)
+                        self.redis.sadd(self.key_loaded, nid)
+                        self.redis.srem(self.key_inflight, nid)
 
-                        # check children
+                        # Publish a READY event for children whose all parents are LOADED.
                         for child in self.children_map.get(nid, set()):
-                            try:
-                                if self.redis.sismember(self.key_loaded, child) or self.redis.sismember(self.key_inflight, child):
-                                    continue
-                            except Exception:
-                                # if Redis is flaky, best-effort skip publishing
-                                pass
                             if self.all_parents_loaded(child):
                                 self.publish_ready(child)
 
                     else:
                         metrics.FAILED_COUNTER.inc()
-                        reason = ev.info
-                        log.warning("Worker reported failure %s: %s", nid, reason)
-                        # forward to FAILED and DLQ
                         try:
-                            self.client.send(TOPIC_FAILED, {"id": nid, "info": reason, "run_id": self.run_id}, key=nid, sync=False)
-                            self.client.send(TOPIC_DLQ, {"id": nid, "info": reason, "run_id": self.run_id}, key=nid, sync=False)
+                            self.client.send(TOPIC_FAILED, {"id": nid, "info": ev.info, "run_id": self.run_id}, key=nid,
+                                             sync=False)
+                            self.client.send(TOPIC_DLQ, {"id": nid, "info": ev.info, "run_id": self.run_id}, key=nid,
+                                             sync=False)
                         except Exception as e:
                             log.exception("Failed to forward FAILED/DLQ for %s: %s", nid, e)
 
-                    if self._stop.is_set():
-                        break
-
                 if self._stop.is_set():
                     break
-
-        except Exception as e:
-            log.exception("Orchestrator loop error: %s", e)
 
         finally:
             try:
                 consumer.close()
             except Exception:
                 pass
-            # stop metrics uptime collector if running
-            try:
-                if self._metrics_stop_event:
-                    self._metrics_stop_event.set()
-            except Exception:
-                pass
+            if self._metrics_stop_event:
+                self._metrics_stop_event.set()
             log.info("Orchestrator stopped (run_id=%s)", self.run_id)
